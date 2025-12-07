@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>1 vs 1 Battle – Multiplayer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --vh: 1vh; /* di-set via JS */
+    }
+
+    html, body {
+      width: 100%;
+      height: calc(var(--vh) * 100);
+      overflow: hidden;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    #gameWrapper {
+      position: relative;
+      width: 100vw;
+      height: calc(var(--vh) * 100);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(#1a1a2e, #16213e);
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Title bar di dalam game */
+    #titleBar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      background: rgba(0,0,0,0.82);
+      z-index: 8;
+      pointer-events: none;
+    }
+
+    /* tombol kecil di title bar */
+    #fullscreenBtn,
+    #shareBtn {
+      position: absolute;
+      top: 4px;
+      z-index: 9;
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #fullscreenBtn { right: 6px; }
+    #shareBtn { left: 6px; font-size: 13px; padding: 0 4px; }
+
+    #fullscreenBtn:active,
+    #shareBtn:active {
+      transform: scale(0.95);
+    }
+
+    /* INFO ROOM (kecil di bawah title bar kiri) */
+    #roomInfo {
+      position: absolute;
+      top: 30px;
+      left: 10px;
+      right: 10px;
+      font-size: 10px;
+      color: #ddd;
+      z-index: 4;
+      text-align: left;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .hud {
+      position: absolute;
+      top: 45px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      z-index: 5;
+    }
+
+    .health-bar { flex: 1; }
+    .health-label { margin-bottom: 3px; }
+    .health-outer {
+      width: 100%;
+      height: 9px;
+      background: #444;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    .health-inner {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #12c2e9, #c471ed, #f64f59);
+      transition: width 0.15s;
+    }
+
+    #message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      text-align: center;
+      display: none;
+      z-index: 10;
+    }
+
+    #restartBtn {
+      margin-top: 6px;
+      padding: 4px 8px;
+      background: #00c853;
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* Controls lebih naik: bottom 12% */
+    #controls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 12%;
+      padding: 0 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      z-index: 6;
+      pointer-events: none;
+    }
+    #controls > * { pointer-events: auto; }
+
+    .joystick-area {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+    .joystick-base {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      background: radial-gradient(circle, #333 0%, #111 60%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .joystick-knob {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #00e5ff 0%, #0072ff 70%);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.7);
+      transform: translate(0, 0);
+      transition: transform 0.05s linear;
+    }
+
+    .buttons-area {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      flex: 1;
+      gap: 18px;
+    }
+    .btn-circle {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      border: none;
+      font-weight: bold;
+      font-size: 13px;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+      touch-action: manipulation;
+    }
+    #jumpBtn  { background: radial-gradient(circle, #ffc400 0%, #ff6f00 70%); }
+    #attackBtn{ background: radial-gradient(circle, #ff1744 0%, #d50000 70%); }
+    .btn-circle:active { transform: scale(0.95); }
+
+    #rotateNotice {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 18px;
+      padding: 20px;
+      z-index: 9999;
+    }
+    #rotateNotice p {
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 600px) {
+      #titleBar { font-size: 12px; }
+      .joystick-area { width: 120px; height: 120px; }
+      .btn-circle { width: 68px; height: 68px; font-size: 11px; }
+      .hud { font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="rotateNotice">
+    <p>Silakan putar HP ke posisi <b>landscape</b> untuk bermain 🔁</p>
+  </div>
+
+  <div id="gameWrapper">
+    <div id="gameContainer">
+      <div id="titleBar">1 vs 1 Battle – Multiplayer</div>
+      <button id="shareBtn" title="Share Link">⇪</button>
+      <button id="fullscreenBtn" title="Fullscreen">⛶</button>
+
+      <div id="roomInfo"></div>
+
+      <canvas id="gameCanvas"></canvas>
+
+      <div class="hud">
+        <div class="health-bar">
+          <div class="health-label">YOU</div>
+          <div class="health-outer">
+            <div id="playerHealth" class="health-inner"></div>
+          </div>
+        </div>
+        <div class="health-bar">
+          <div class="health-label" style="text-align:right;">ENEMY</div>
+          <div class="health-outer">
+            <div id="enemyHealth" class="health-inner"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="message">
+        <div id="messageText"></div>
+        <button id="restartBtn">Restart</button>
+      </div>
+
+      <div id="controls">
+        <div class="joystick-area" id="joystickArea">
+          <div class="joystick-base">
+            <div class="joystick-knob" id="joystickKnob"></div>
+          </div>
+        </div>
+        <div class="buttons-area">
+          <button class="btn-circle" id="jumpBtn">JUMP</button>
+          <button class="btn-circle" id="attackBtn">ATTACK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ====== FIX 100vh MOBILE ======
+    function setVh() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    window.addEventListener('load', setVh);
+    window.addEventListener('resize', setVh);
+    window.addEventListener('orientationchange', setVh);
+
+    // ====== ORIENTATION ======
+    function checkOrientation() {
+      const notice = document.getElementById("rotateNotice");
+      const isPortrait = window.innerHeight > window.innerWidth;
+      notice.style.display = isPortrait ? "flex" : "none";
+    }
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+    window.addEventListener("load", checkOrientation);
+
+    // ====== FULLSCREEN ======
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    fullscreenBtn.addEventListener("click", () => {
+      if (!document.fullscreenElement) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+    });
+
+    // ====== ROOM & SUPABASE ======
+    const roomInfoEl = document.getElementById("roomInfo");
+
+    const params  = new URLSearchParams(window.location.search);
+    let roomId = params.get("room");
+    if (!roomId) {
+      roomId = Math.random().toString(36).slice(2, 8);
+      const newUrl = window.location.origin + window.location.pathname + "?room=" + roomId;
+      window.history.replaceState({}, "", newUrl);
+    }
+
+    const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
+      Math.random().toString(36).slice(2);
+
+    roomInfoEl.textContent = "Room: " + roomId + "  •  Share link ke teman untuk 1vs1";
+
+    // Share link button
+    const shareBtn = document.getElementById("shareBtn");
+    shareBtn.addEventListener("click", async () => {
+      const url = window.location.href;
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: "1vs1 Battle",
+            text: "Join room battle aku!",
+            url
+          });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          const old = shareBtn.textContent;
+          shareBtn.textContent = "✓";
+          setTimeout(() => shareBtn.textContent = old, 1200);
+        } else {
+          alert("Copy link ini:\n" + url);
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    });
+
+    // GANTI DENGAN PUNYA KAMU
+    const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const channel = sb.channel("room-" + roomId, {
+      config: { broadcast: { self: false } }
+    });
+
+    channel
+      .on("broadcast", { event: "state" }, ({ payload }) => {
+        if (!payload || payload.clientId === clientId) return;
+        applyEnemyState(payload.state);
+      })
+      .subscribe();
+
+    function sendMyState() {
+      if (!channel) return;
+      const state = {
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        health: player.health,
+        direction: player.direction,
+        isAttacking: player.isAttacking
+      };
+      channel.send({
+        type: "broadcast",
+        event: "state",
+        payload: { clientId, state }
+      });
+    }
+
+    function applyEnemyState(state) {
+      if (!state) return;
+      enemy.x = state.x;
+      enemy.y = state.y;
+      enemy.vx = state.vx;
+      enemy.vy = state.vy;
+      enemy.health = state.health;
+      enemy.direction = state.direction;
+      enemy.isAttacking = state.isAttacking;
+    }
+
+    // ====== AUDIO ======
+    let audioStarted = false;
+    const bgm = new Audio("audio/bgm-battle.mp3");
+    bgm.loop = true;
+    bgm.volume = 0.4;
+
+    const sfxJump   = new Audio("audio/jump.wav");
+    const sfxAttack = new Audio("audio/attack.wav");
+    const sfxHit    = new Audio("audio/hit.wav");
+
+    function playOnce(sample) {
+      try {
+        const a = sample.cloneNode();
+        a.volume = sample.volume ?? 1;
+        a.play();
+      } catch (e) {
+        console.log("audio error", e);
+      }
+    }
+
+    function startAudioIfNeeded() {
+      if (audioStarted) return;
+      audioStarted = true;
+      bgm.play().catch(()=>{});
+    }
+
+    // Trigger mulai BGM saat first input
+    window.addEventListener("keydown", startAudioIfNeeded, { once: true });
+    window.addEventListener("mousedown", startAudioIfNeeded, { once: true });
+    window.addEventListener("touchstart", startAudioIfNeeded, { once: true });
+
+    // ====== GAME SETUP ======
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const GAME_WIDTH = 900;
+    const GAME_HEIGHT = 506;
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+
+    const playerHealthBar = document.getElementById("playerHealth");
+    const enemyHealthBar  = document.getElementById("enemyHealth");
+    const messageBox  = document.getElementById("message");
+    const messageText = document.getElementById("messageText");
+    const restartBtn  = document.getElementById("restartBtn");
+
+    const joystickArea = document.getElementById("joystickArea");
+    const joystickKnob = document.getElementById("joystickKnob");
+    const jumpBtn   = document.getElementById("jumpBtn");
+    const attackBtn = document.getElementById("attackBtn");
+
+    const gravity = 0.7;
+    const groundY = GAME_HEIGHT - 80;
+    const friction = 0.8;
+
+    let animTime    = 0;
+    let screenShake = 0;
+
+    function createFighter(x, color) {
+      return {
+        x,
+        y: groundY - 90,
+        width: 46,
+        height: 90,
+        vx: 0,
+        vy: 0,
+        speed: 5,
+        direction: 1,
+        color,
+        onGround: true,
+        health: 100,
+        isAttacking: false,
+        attackTimer: 0,
+        attackCooldown: 0,
+        hitFlash: 0,
+      };
+    }
+
+    const player = createFighter(220, "#00e5ff");
+    const enemy  = createFighter(620, "#ff4b5c");
+
+    const input = { moveX: 0, jump: false, attack: false };
+    const keys  = {};
+    window.addEventListener("keydown", (e) => { keys[e.key] = true; });
+    window.addEventListener("keyup",   (e) => { keys[e.key] = false; });
+
+    // ====== JOYSTICK ======
+    let joystickTouchId = null;
+    const knobMaxDistance = 30;
+
+    function resetJoystick() {
+      joystickKnob.style.transform = "translate(0px, 0px)";
+      input.moveX = 0;
+    }
+
+    function handleJoystickTouchStart(ev) {
+      startAudioIfNeeded();
+      const touch = ev.changedTouches[0];
+      joystickTouchId = touch.identifier;
+      handleJoystickMove(ev);
+    }
+
+    function handleJoystickMove(ev) {
+      if (joystickTouchId === null) return;
+      const touch = [...ev.changedTouches].find(t => t.identifier === joystickTouchId);
+      if (!touch) return;
+
+      const rect = joystickArea.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top  + rect.height / 2;
+      const dx = touch.clientX - centerX;
+      const dy = touch.clientY - centerY;
+
+      const angle = Math.atan2(dy, dx);
+      const dist  = Math.min(knobMaxDistance, Math.hypot(dx, dy));
+      const knobX = Math.cos(angle) * dist;
+      const knobY = Math.sin(angle) * dist;
+
+      joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+      input.moveX = Math.max(-1, Math.min(1, knobX / knobMaxDistance));
+    }
+
+    function handleJoystickTouchEnd(ev) {
+      const ended = [...ev.changedTouches].find(t => t.identifier === joystickTouchId);
+      if (!ended) return;
+      joystickTouchId = null;
+      resetJoystick();
+    }
+
+    joystickArea.addEventListener("touchstart", (ev) => { ev.preventDefault(); handleJoystickTouchStart(ev); });
+    joystickArea.addEventListener("touchmove",  (ev) => { ev.preventDefault(); handleJoystickMove(ev); });
+    joystickArea.addEventListener("touchend",   (ev) => { ev.preventDefault(); handleJoystickTouchEnd(ev); });
+    joystickArea.addEventListener("touchcancel",(ev) => { ev.preventDefault(); handleJoystickTouchEnd(ev); });
+
+    jumpBtn.addEventListener("touchstart", (ev) => { ev.preventDefault(); startAudioIfNeeded(); input.jump = true; });
+    jumpBtn.addEventListener("touchend",   (ev) => { ev.preventDefault(); input.jump = false; });
+    attackBtn.addEventListener("touchstart", (ev) => { ev.preventDefault(); startAudioIfNeeded(); input.attack = true; });
+    attackBtn.addEventListener("touchend",   (ev) => { ev.preventDefault(); input.attack = false; });
+
+    jumpBtn.addEventListener("mousedown", () => { startAudioIfNeeded(); input.jump = true; });
+    jumpBtn.addEventListener("mouseup",   () => { input.jump = false; });
+    attackBtn.addEventListener("mousedown", () => { startAudioIfNeeded(); input.attack = true; });
+    attackBtn.addEventListener("mouseup",   () => { input.attack = false; });
+
+    // ====== GAME LOGIC ======
+    let lastTime = 0;
+    let gameOver = false;
+
+    function update(dt) {
+      animTime += dt;
+      if (screenShake > 0) {
+        screenShake = Math.max(0, screenShake - 40 * dt);
+      }
+
+      let horizontal = input.moveX;
+      if (joystickTouchId === null) {
+        if (keys["a"] || keys["ArrowLeft"])  horizontal = -1;
+        else if (keys["d"] || keys["ArrowRight"]) horizontal = 1;
+        else horizontal = 0;
+      }
+
+      player.vx += horizontal * player.speed * 0.6;
+      if (horizontal < 0) player.direction = -1;
+      if (horizontal > 0) player.direction = 1;
+
+      const wantJump = input.jump || keys["w"] || keys["ArrowUp"] || keys[" "];
+      if (wantJump && player.onGround) {
+        player.vy = -15;
+        player.onGround = false;
+        playOnce(sfxJump);
+      }
+
+      const wantAttack = input.attack || keys["j"] || keys["J"];
+      if (wantAttack && !player.isAttacking && player.attackCooldown <= 0) {
+        startAttack(player);
+        playOnce(sfxAttack);
+      }
+
+      // Enemy DI-CONTROL OLEH LAWAN via Supabase
+      // (tidak pakai AI di sini)
+
+      [player, enemy].forEach(f => {
+        f.vy += gravity;
+        f.x += f.vx;
+        f.y += f.vy;
+
+        f.vx *= friction;
+
+        if (f.y + f.height >= groundY) {
+          f.y = groundY - f.height;
+          f.vy = 0;
+          f.onGround = true;
+        } else {
+          f.onGround = false;
+        }
+
+        if (f.x < 30) f.x = 30;
+        if (f.x + f.width > GAME_WIDTH - 30) f.x = GAME_WIDTH - 30 - f.width;
+
+        if (f.isAttacking) {
+          f.attackTimer -= dt;
+          if (f.attackTimer <= 0) f.isAttacking = false;
+        }
+        if (f.attackCooldown > 0) f.attackCooldown -= dt;
+        if (f.hitFlash > 0) {
+          f.hitFlash -= dt;
+          if (f.hitFlash < 0) f.hitFlash = 0;
+        }
+      });
+
+      checkAttackHit(player, enemy);
+      checkAttackHit(enemy, player);
+
+      playerHealthBar.style.width = `${Math.max(0, player.health)}%`;
+      enemyHealthBar.style.width  = `${Math.max(0, enemy.health)}%`;
+
+      if (!gameOver && (player.health <= 0 || enemy.health <= 0)) {
+        gameOver = true;
+        const winText =
+          player.health <= 0 && enemy.health <= 0
+            ? "Draw!"
+            : player.health > 0
+              ? "You Win! 🎉"
+              : "You Lose... 😢";
+        showMessage(winText);
+      }
+    }
+
+    function startAttack(f) {
+      f.isAttacking = true;
+      f.attackTimer = 0.18;
+      f.attackCooldown = 0.55;
+    }
+
+    function rectsOverlap(a, b) {
+      return !(
+        a.x > b.x + b.width ||
+        a.x + a.width < b.x ||
+        a.y > b.y + b.height ||
+        a.y + a.height < b.y
+      );
+    }
+
+    function checkAttackHit(attacker, target) {
+      if (!attacker.isAttacking) return;
+      const range = 42;
+      const hitbox = {
+        x: attacker.direction === 1 ? attacker.x + attacker.width : attacker.x - range,
+        y: attacker.y + 18,
+        width: range,
+        height: attacker.height - 32,
+      };
+      if (rectsOverlap(hitbox, target)) {
+        target.health -= 9;
+        target.vx += attacker.direction * 6;
+        target.vy = -5;
+        target.hitFlash = 0.16;
+        screenShake = 7;
+        playOnce(sfxHit);
+        attacker.isAttacking = false;
+      }
+    }
+
+    // kirim state ke Supabase tiap 50 ms
+    setInterval(() => {
+      if (!gameOver) sendMyState();
+    }, 50);
+
+    // ====== RENDER ======
+    function drawBackground() {
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, groundY, GAME_WIDTH, GAME_HEIGHT - groundY);
+
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(40, groundY - 8, GAME_WIDTH - 80, 8);
+
+      ctx.fillStyle = "#0b1220";
+      for (let i = 0; i < 10; i++) {
+        const w = 70;
+        const x = i * 90 + 20;
+        const h = 90 + (i % 3) * 30;
+        ctx.fillRect(x, groundY - h - 40, w, h);
+      }
+
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < 40; i++) {
+        const x = (i * 97) % GAME_WIDTH;
+        const y = 30 + (i * 53) % 160;
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+
+    function drawRoundedRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function drawFighter(f, isPlayer) {
+      const bob = f.onGround ? Math.sin(animTime * (isPlayer ? 7 : 5)) * 2 : 0;
+      const baseX = f.x;
+      const baseY = f.y + bob;
+
+      const bodyH = f.height * 0.55;
+      const headH = f.height * 0.35;
+      const legH  = f.height * 0.25;
+
+      const bodyY = baseY + headH * 0.7;
+      const headY = baseY;
+      const bodyX = baseX;
+      const headX = baseX + 4;
+
+      // Shadow
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath();
+      ctx.ellipse(
+        baseX + f.width / 2,
+        groundY + 5,
+        f.width / 1.7,
+        10,
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+
+      // Legs
+      const legW = f.width * 0.28;
+      const legOffset = Math.sin(animTime * 9) * 4 * (Math.abs(f.vx) > 0.5 ? 1 : 0);
+      ctx.fillStyle = "#050b16";
+      ctx.fillRect(baseX + 6, bodyY + bodyH - 2 + legOffset, legW, legH);
+      ctx.fillRect(baseX + f.width - legW - 6, bodyY + bodyH - 2 - legOffset, legW, legH);
+
+      // Body
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = 8;
+      const bodyColor = f.hitFlash > 0 ? "#ffffff" : f.color;
+      const gradient = ctx.createLinearGradient(bodyX, bodyY, bodyX, bodyY + bodyH);
+      gradient.addColorStop(0, bodyColor);
+      gradient.addColorStop(1, "#06101f");
+      ctx.fillStyle = gradient;
+      drawRoundedRect(bodyX, bodyY, f.width, bodyH, 10);
+      ctx.fill();
+      ctx.restore();
+
+      // Body stripe
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.fillRect(bodyX + 4, bodyY + bodyH * 0.45, f.width - 8, 6);
+
+      // Head
+      ctx.fillStyle = bodyColor;
+      drawRoundedRect(headX, headY, f.width - 8, headH, 8);
+      ctx.fill();
+
+      // Face panel
+      ctx.fillStyle = "#f5f5f5";
+      drawRoundedRect(headX + 6, headY + 8, f.width - 20, headH - 20, 6);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = "#000";
+      const eyeSize = 6;
+      ctx.fillRect(headX + 10, headY + 14, eyeSize, eyeSize);
+      ctx.fillRect(headX + (f.width - 8) - eyeSize - 10, headY + 14, eyeSize, eyeSize);
+
+      // Arms
+      const armH = 20;
+      const armW = 8;
+      const armSwing = Math.sin(animTime * 10) * 3 * (Math.abs(f.vx) > 0.5 ? 1 : 0);
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(bodyX - armW + 2, bodyY + 12 + armSwing, armW, armH);
+      ctx.fillRect(bodyX + f.width - 2, bodyY + 12 - armSwing, armW, armH);
+
+      // Attack effect
+      if (f.isAttacking) {
+        const range = 40;
+        const hx = f.direction === 1 ? baseX + f.width : baseX - range;
+        const hy = bodyY + 10;
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.fillRect(hx, hy, range * f.direction, bodyH - 20);
+
+        ctx.beginPath();
+        ctx.arc(
+          f.direction === 1 ? hx + range : hx,
+          bodyY + bodyH / 2,
+          8,
+          0,
+          Math.PI * 2
+        );
+        ctx.fillStyle = "rgba(255,255,0,0.75)";
+        ctx.fill();
+      }
+    }
+
+    function draw() {
+      ctx.save();
+      if (screenShake > 0) {
+        const sx = (Math.random() - 0.5) * screenShake;
+        const sy = (Math.random() - 0.5) * screenShake;
+        ctx.translate(sx, sy);
+      }
+
+      ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      drawBackground();
+      drawFighter(player, true);
+      drawFighter(enemy, false);
+
+      ctx.restore();
+    }
+
+    // ====== MESSAGE & LOOP ======
+    function showMessage(text) {
+      messageText.textContent = text;
+      messageBox.style.display = "block";
+    }
+    function hideMessage() {
+      messageBox.style.display = "none";
+    }
+
+    restartBtn.addEventListener("click", () => {
+      const pColor = player.color;
+      const eColor = enemy.color;
+      Object.assign(player, createFighter(220, pColor));
+      Object.assign(enemy,  createFighter(620, eColor));
+      gameOver = false;
+      hideMessage();
+    });
+
+    function gameLoop(timestamp) {
+      const dt = (timestamp - lastTime) / 1000 || 0;
+      lastTime = timestamp;
+
+      if (!gameOver) update(dt);
+      draw();
+
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
