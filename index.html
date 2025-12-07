@@ -8,7 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --vh: 1vh; /* di-set via JS */
+      --vh: 1vh;
     }
 
     html, body {
@@ -52,7 +52,6 @@
       display: block;
     }
 
-    /* Title bar di dalam game */
     #titleBar {
       position: absolute;
       top: 0;
@@ -68,7 +67,6 @@
       pointer-events: none;
     }
 
-    /* tombol kecil di title bar */
     #fullscreenBtn,
     #shareBtn {
       position: absolute;
@@ -94,7 +92,6 @@
       transform: scale(0.95);
     }
 
-    /* INFO ROOM (kecil di bawah title bar kiri) */
     #roomInfo {
       position: absolute;
       top: 30px;
@@ -141,13 +138,14 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.7);
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 16px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 18px;
       text-align: center;
       display: none;
       z-index: 10;
+      min-width: 180px;
     }
 
     #restartBtn {
@@ -161,7 +159,6 @@
       cursor: pointer;
     }
 
-    /* Controls lebih naik: bottom 12% */
     #controls {
       position: absolute;
       left: 0;
@@ -341,7 +338,7 @@
       }
     });
 
-    // ====== ROOM & SUPABASE ======
+    // ====== ROOM ======
     const roomInfoEl = document.getElementById("roomInfo");
 
     const params  = new URLSearchParams(window.location.search);
@@ -355,9 +352,9 @@
     const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
       Math.random().toString(36).slice(2);
 
-    roomInfoEl.textContent = "Room: " + roomId + "  •  Share link ke teman untuk 1vs1";
+    roomInfoEl.textContent = "Room: " + roomId + "  •  Waiting for opponent...";
 
-    // Share link button
+    // ====== SHARE BUTTON ======
     const shareBtn = document.getElementById("shareBtn");
     shareBtn.addEventListener("click", async () => {
       const url = window.location.href;
@@ -381,23 +378,50 @@
       }
     });
 
-    // GANTI DENGAN PUNYA KAMU
-    const SUPABASE_URL = "https://ylyiktbputlddeilnada.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlseWlrdGJwdXRsZGRlaWxuYWRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzYwMTUsImV4cCI6MjA3OTkxMjAxNX0.6FOD3dZWS3vBDHgnUYXJD6Dt6N2CVaWZ15tqxdgeVUA";
+    // ====== SUPABASE SETUP ======
+    // GANTI DENGAN PROJECT KAMU
+    const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
 
     const { createClient } = supabase;
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    let gameLocked = true;      // tidak bisa gerak sebelum countdown selesai
+    let countdownActive = false;
+
     const channel = sb.channel("room-" + roomId, {
-      config: { broadcast: { self: false } }
+      config: {
+        broadcast: { self: false },
+        presence: { key: clientId }
+      }
     });
 
+    // Presence: cek berapa player di dalam room
     channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const playerCount = Object.keys(state).length;
+        if (playerCount === 1) {
+          roomInfoEl.textContent = "Room: " + roomId + "  •  Waiting for opponent...";
+          showMessage("Waiting for another player...");
+        }
+        if (playerCount >= 2) {
+          roomInfoEl.textContent = "Room: " + roomId + "  •  Both players connected!";
+          if (!countdownActive && gameLocked) {
+            startCountdown();
+          }
+        }
+      })
       .on("broadcast", { event: "state" }, ({ payload }) => {
         if (!payload || payload.clientId === clientId) return;
         applyEnemyState(payload.state);
       })
-      .subscribe();
+      .subscribe(status => {
+        if (status === "SUBSCRIBED") {
+          // daftar presence
+          channel.track({ joined_at: new Date().toISOString() });
+        }
+      });
 
     function sendMyState() {
       if (!channel) return;
@@ -454,7 +478,6 @@
       bgm.play().catch(()=>{});
     }
 
-    // Trigger mulai BGM saat first input
     window.addEventListener("keydown", startAudioIfNeeded, { once: true });
     window.addEventListener("mousedown", startAudioIfNeeded, { once: true });
     window.addEventListener("touchstart", startAudioIfNeeded, { once: true });
@@ -572,6 +595,25 @@
     attackBtn.addEventListener("mousedown", () => { startAudioIfNeeded(); input.attack = true; });
     attackBtn.addEventListener("mouseup",   () => { input.attack = false; });
 
+    // ====== COUNTDOWN ======
+    function startCountdown() {
+      countdownActive = true;
+      gameLocked = true;
+      let count = 3;
+      showMessage("Opponent joined!\nStarting in " + count);
+      const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          showMessage("Starting in " + count);
+        } else {
+          clearInterval(interval);
+          hideMessage();
+          gameLocked = false;      // sekarang baru bisa gerak
+          countdownActive = false;
+        }
+      }, 1000);
+    }
+
     // ====== GAME LOGIC ======
     let lastTime = 0;
     let gameOver = false;
@@ -582,32 +624,33 @@
         screenShake = Math.max(0, screenShake - 40 * dt);
       }
 
-      let horizontal = input.moveX;
+      let horizontal = gameLocked ? 0 : input.moveX;
       if (joystickTouchId === null) {
-        if (keys["a"] || keys["ArrowLeft"])  horizontal = -1;
-        else if (keys["d"] || keys["ArrowRight"]) horizontal = 1;
-        else horizontal = 0;
+        if (!gameLocked) {
+          if (keys["a"] || keys["ArrowLeft"])  horizontal = -1;
+          else if (keys["d"] || keys["ArrowRight"]) horizontal = 1;
+          else horizontal = 0;
+        } else {
+          horizontal = 0;
+        }
       }
 
       player.vx += horizontal * player.speed * 0.6;
       if (horizontal < 0) player.direction = -1;
       if (horizontal > 0) player.direction = 1;
 
-      const wantJump = input.jump || keys["w"] || keys["ArrowUp"] || keys[" "];
+      const wantJump = !gameLocked && (input.jump || keys["w"] || keys["ArrowUp"] || keys[" "]);
       if (wantJump && player.onGround) {
         player.vy = -15;
         player.onGround = false;
         playOnce(sfxJump);
       }
 
-      const wantAttack = input.attack || keys["j"] || keys["J"];
+      const wantAttack = !gameLocked && (input.attack || keys["j"] || keys["J"]);
       if (wantAttack && !player.isAttacking && player.attackCooldown <= 0) {
         startAttack(player);
         playOnce(sfxAttack);
       }
-
-      // Enemy DI-CONTROL OLEH LAWAN via Supabase
-      // (tidak pakai AI di sini)
 
       [player, enemy].forEach(f => {
         f.vy += gravity;
@@ -862,7 +905,8 @@
       Object.assign(player, createFighter(220, pColor));
       Object.assign(enemy,  createFighter(620, eColor));
       gameOver = false;
-      hideMessage();
+      gameLocked = true;
+      showMessage("Waiting for another player...");
     });
 
     function gameLoop(timestamp) {
@@ -875,6 +919,9 @@
       requestAnimationFrame(gameLoop);
     }
     requestAnimationFrame(gameLoop);
+
+    // pertama kali buka, tampilkan waiting message
+    showMessage("Waiting for another player...");
   </script>
 </body>
 </html>
